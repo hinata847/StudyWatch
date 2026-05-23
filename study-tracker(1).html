@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StudyWatch</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080807;
+    --border: #2a2825;
+    --text-primary: #ffffff;
+    --text-secondary: #d8d4cc;
+    --text-muted: #a09a94;
+    --accent: #c8a96e;
+    --study-color: #9ab08e;
+    --ring-normal: #2e2c2a;
+    --ring-study: #6b7a61;
+  }
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width:100vw; height:100vh; overflow:hidden;
+    background:var(--bg); color:var(--text-primary);
+    font-family:'Zen Kaku Gothic New',sans-serif; font-weight:500;
+  }
+  body { display:flex; flex-direction:column; align-items:center; justify-content:center; }
+
+  /* ── Auth overlay ── */
+  #authOverlay {
+    position:fixed; inset:0; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:28px; z-index:200;
+  }
+  #authOverlay.hidden { display:none; }
+  .auth-title {
+    font-family:'Cormorant Garamond',serif; font-weight:600;
+    font-size:clamp(26px,3.5vh,42px); letter-spacing:0.38em;
+    color:var(--text-secondary); text-transform:uppercase;
+  }
+  .auth-sub {
+    font-size:clamp(12px,1.5vh,15px); color:var(--text-muted);
+    letter-spacing:0.15em; text-align:center; line-height:1.8;
+  }
+  .btn-google {
+    display:flex; align-items:center; gap:12px;
+    background:#fff; color:#1a1a1a;
+    border:none; border-radius:3px; cursor:pointer;
+    padding:13px 28px;
+    font-family:'Zen Kaku Gothic New',sans-serif;
+    font-weight:700; font-size:14px; letter-spacing:0.15em;
+    transition:all .25s;
+  }
+  .btn-google:hover { background:#f0f0f0; transform:translateY(-1px); box-shadow:0 6px 20px rgba(0,0,0,.4); }
+  .btn-google svg { flex-shrink:0; }
+  .auth-note { font-size:11px; color:var(--text-muted); letter-spacing:0.12em; }
+
+  /* ── Main app ── */
+  .app { display:flex; flex-direction:column; align-items:center; gap:clamp(10px,1.4vh,20px); width:100%; }
+
+  .header { display:flex; align-items:baseline; gap:14px; }
+  .header-title {
+    font-family:'Cormorant Garamond',serif; font-weight:600;
+    font-size:clamp(22px,2.6vh,34px); letter-spacing:0.38em;
+    color:var(--text-secondary); text-transform:uppercase;
+  }
+  .header-date { font-size:clamp(13px,1.5vh,16px); font-weight:500; letter-spacing:0.18em; color:var(--text-muted); }
+
+  /* user badge */
+  .user-badge {
+    display:flex; align-items:center; gap:8px;
+    font-size:12px; color:var(--text-muted); letter-spacing:0.12em;
+    cursor:pointer; transition:color .2s;
+  }
+  .user-badge:hover { color:var(--text-secondary); }
+  .user-badge img { width:22px; height:22px; border-radius:50%; border:1px solid var(--border); }
+
+  /* Clock wrapper */
+  .clock-wrapper {
+    position:relative; display:flex; align-items:center; justify-content:center;
+    width:var(--cw,500px); height:var(--cw,500px);
+  }
+  .ring-canvas { position:absolute; inset:0; width:100%; height:100%; }
+  .clock-svg { position:absolute; width:var(--cd,385px); height:var(--cd,385px); }
+
+  /* Tooltip */
+  #tooltip {
+    position:fixed; pointer-events:none;
+    background:rgba(20,19,18,0.95); border:1px solid #3a3835;
+    border-radius:3px; padding:8px 13px;
+    font-size:12px; font-weight:500; letter-spacing:0.1em;
+    color:var(--text-secondary); line-height:1.7;
+    z-index:50; opacity:0; transition:opacity .15s;
+    white-space:nowrap;
+  }
+  #tooltip.visible { opacity:1; }
+
+  /* Status */
+  .status-strip { display:flex; align-items:center; gap:clamp(24px,3.5vw,60px); }
+  .status-item { display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .status-value {
+    font-family:'Cormorant Garamond',serif; font-weight:600;
+    font-size:clamp(30px,3.8vh,52px); letter-spacing:0.05em;
+    color:var(--text-primary); line-height:1; transition:color .4s;
+  }
+  .status-value.active { color:var(--study-color); }
+  .status-label { font-size:clamp(11px,1.3vh,14px); font-weight:700; letter-spacing:0.22em; color:var(--text-muted); text-transform:uppercase; }
+  .status-divider { width:1px; height:clamp(36px,4.5vh,56px); background:var(--border); }
+
+  /* Buttons */
+  .controls { display:flex; gap:clamp(10px,1.5vw,20px); align-items:center; }
+  .btn {
+    cursor:pointer; border:none; outline:none;
+    font-family:'Zen Kaku Gothic New',sans-serif; font-weight:700;
+    letter-spacing:0.22em; font-size:clamp(12px,1.5vh,16px);
+    text-transform:uppercase; transition:all .3s ease;
+  }
+  .btn-primary {
+    background:var(--accent); color:#080807;
+    padding:clamp(11px,1.5vh,18px) clamp(28px,4vw,56px); border-radius:2px;
+  }
+  .btn-primary:hover { background:#dac088; transform:translateY(-1px); box-shadow:0 8px 24px rgba(200,169,110,.25); }
+  .btn-primary.studying {
+    background:transparent; color:var(--text-secondary); border:1px solid #3a3835;
+  }
+  .btn-primary.studying:hover { border-color:var(--text-muted); color:var(--text-primary); transform:translateY(-1px); }
+  .btn-reset {
+    background:transparent; color:var(--text-muted);
+    padding:clamp(11px,1.5vh,18px) clamp(14px,2vw,24px);
+    border:1px solid var(--border); border-radius:2px; font-size:clamp(11px,1.3vh,14px);
+  }
+  .btn-reset:hover { color:var(--text-secondary); border-color:var(--text-muted); }
+
+  /* Indicator */
+  .indicator { width:7px; height:7px; border-radius:50%; background:var(--text-muted); transition:all .4s; }
+  .indicator.on { background:var(--study-color); box-shadow:0 0 9px var(--study-color); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+
+  /* Sync status */
+  .sync-row { display:flex; align-items:center; gap:10px; }
+  .sync-dot { width:6px; height:6px; border-radius:50%; background:var(--text-muted); }
+  .sync-dot.ok  { background:#7a9e6e; }
+  .sync-dot.err { background:#c8603a; }
+  .sync-label { font-size:11px; color:var(--text-muted); letter-spacing:0.15em; }
+
+  /* Legend */
+  .legend { display:flex; gap:clamp(14px,2.2vw,28px); align-items:center; }
+  .legend-item {
+    display:flex; align-items:center; gap:8px;
+    font-size:clamp(10px,1.2vh,13px); font-weight:700;
+    letter-spacing:0.2em; color:var(--text-muted); text-transform:uppercase;
+  }
+  .legend-dot { width:9px; height:9px; border-radius:50%; }
+  .legend-dot.normal { background:var(--ring-normal); border:1px solid #3a3835; }
+  .legend-dot.study  { background:var(--ring-study); }
+</style>
+</head>
+<body>
+
+<!-- Auth overlay -->
+<div id="authOverlay">
+  <div class="auth-title">StudyWatch</div>
+  <div class="auth-sub">Googleアカウントでログインすると<br>PCとスマホでデータが同期されます</div>
+  <button class="btn-google" id="loginBtn">
+    <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
+    Googleでログイン
+  </button>
+  <div class="auth-note">データはあなたのアカウントにのみ紐付けられます</div>
+</div>
+
+<!-- Tooltip -->
+<div id="tooltip"></div>
+
+<!-- Main -->
+<div class="app" id="mainApp">
+  <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;justify-content:center;">
+    <div class="header">
+      <span class="header-title">StudyWatch</span>
+      <span class="header-date" id="dateLabel">—</span>
+    </div>
+    <div class="user-badge" id="userBadge" title="ログアウト">
+      <img id="userPhoto" src="" alt="">
+      <span id="userName"></span>
+    </div>
+  </div>
+
+  <div class="clock-wrapper" id="clockWrapper">
+    <canvas class="ring-canvas" id="ringCanvas"></canvas>
+    <svg class="clock-svg" id="clockSvg" viewBox="0 0 300 300">
+      <defs>
+        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#000" flood-opacity="0.5"/>
+        </filter>
+        <radialGradient id="faceGrad" cx="50%" cy="42%" r="58%">
+          <stop offset="0%" stop-color="#faf8f3"/>
+          <stop offset="100%" stop-color="#edeae3"/>
+        </radialGradient>
+      </defs>
+      <circle cx="150" cy="150" r="142" fill="#0a0a09" filter="url(#shadow)"/>
+      <circle cx="150" cy="150" r="139" fill="#1a1917"/>
+      <circle cx="150" cy="150" r="133" fill="url(#faceGrad)"/>
+      <circle cx="150" cy="150" r="130" fill="none" stroke="#d0ccc4" stroke-width="0.5"/>
+      <g id="markers"></g>
+      <g id="numbers" font-family="Cormorant Garamond,serif" font-weight="600" fill="#2a2825" text-anchor="middle" dominant-baseline="central"></g>
+      <line id="hourHand" stroke="#2a2825" stroke-width="4.5" stroke-linecap="round"/>
+      <line id="minHand"  stroke="#2a2825" stroke-width="3"   stroke-linecap="round"/>
+      <line id="secHand"  stroke="#c8603a" stroke-width="1.3" stroke-linecap="round"/>
+      <circle cx="150" cy="150" r="5.5" fill="#2a2825"/>
+      <circle cx="150" cy="150" r="2.5" fill="#c8603a"/>
+    </svg>
+  </div>
+
+  <div class="status-strip">
+    <div class="status-item">
+      <span class="status-value" id="studyTimeDisplay">00:00:00</span>
+      <span class="status-label">本日の勉強時間</span>
+    </div>
+    <div class="status-divider"></div>
+    <div class="status-item">
+      <div class="indicator" id="indicator"></div>
+      <span class="status-label" id="statusLabel">待機中</span>
+    </div>
+    <div class="status-divider"></div>
+    <div class="status-item">
+      <span class="status-value" id="percentDisplay">0.0%</span>
+      <span class="status-label">今日の勉強割合</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-primary" id="mainBtn">勉強開始</button>
+    <button class="btn btn-reset"   id="resetBtn">リセット</button>
+  </div>
+
+  <div class="sync-row">
+    <div class="sync-dot" id="syncDot"></div>
+    <span class="sync-label" id="syncLabel">未接続</span>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot normal"></div>経過時間</div>
+    <div class="legend-item"><div class="legend-dot study"></div>勉強時間</div>
+  </div>
+</div>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp }          from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut }
+                                   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getDatabase, ref, onValue, set, serverTimestamp }
+                                   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+// ── Firebase init ─────────────────────────────────────────────────────────────
+const app  = initializeApp({
+  apiKey:            "AIzaSyDC7WNERqEEYJUJCruxnfqgXyoh4WPsJOE",
+  authDomain:        "studywatch-ef0ab.firebaseapp.com",
+  databaseURL:       "https://studywatch-ef0ab-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "studywatch-ef0ab",
+  storageBucket:     "studywatch-ef0ab.firebasestorage.app",
+  messagingSenderId: "1060914532692",
+  appId:             "1:1060914532692:web:071b88796f8784bed7f8c1"
+});
+const auth = getAuth(app);
+const db   = getDatabase(app);
+
+let dbRef     = null;   // Firebase ref for current user/today
+let uid       = null;
+let ignoreRemote = false; // prevent echo when we push
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function freshState() {
+  return { date:todayStr(), totalSeconds:0, isStudying:false, sessionStart:null, segments:[] };
+}
+let state = freshState();
+
+// ── SVG clock face ────────────────────────────────────────────────────────────
+(function buildFace(){
+  const mg=document.getElementById('markers'), ng=document.getElementById('numbers');
+  const cx=150,cy=150,r=130;
+  for(let i=0;i<60;i++){
+    const a=(i/60)*2*Math.PI-Math.PI/2;
+    const isH=i%5===0, len=isH?(i%15===0?14:10):4;
+    const ro=r-3,ri=ro-len;
+    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',cx+ro*Math.cos(a)); l.setAttribute('y1',cy+ro*Math.sin(a));
+    l.setAttribute('x2',cx+ri*Math.cos(a)); l.setAttribute('y2',cy+ri*Math.sin(a));
+    l.setAttribute('stroke',isH?'#4a4642':'#c0bbb2');
+    l.setAttribute('stroke-width',isH?(i%15===0?2:1.4):0.9);
+    mg.appendChild(l);
+  }
+  for(let i=1;i<=12;i++){
+    const a=(i/12)*2*Math.PI-Math.PI/2, nr=r-22;
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',cx+nr*Math.cos(a)); t.setAttribute('y',cy+nr*Math.sin(a));
+    t.setAttribute('font-size',i%3===0?'18':'14'); t.textContent=i;
+    ng.appendChild(t);
+  }
+})();
+
+// ── Sizing ────────────────────────────────────────────────────────────────────
+function applySize(){
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const reserve=Math.max(170,vh*0.175);
+  const cw=Math.min((vh-reserve)*0.97, vw*0.52, 660);
+  document.documentElement.style.setProperty('--cw',cw+'px');
+  document.documentElement.style.setProperty('--cd',(cw*0.77)+'px');
+  const c=document.getElementById('ringCanvas');
+  c.width=Math.round(cw*devicePixelRatio); c.height=Math.round(cw*devicePixelRatio);
+  c.style.width=cw+'px'; c.style.height=cw+'px';
+}
+applySize();
+window.addEventListener('resize',()=>{applySize();drawRing();});
+
+// ── Clock hands ───────────────────────────────────────────────────────────────
+function setHand(id,deg,len,tail){
+  const el=document.getElementById(id);
+  const r=(deg-90)*Math.PI/180;
+  el.setAttribute('x1',150-tail*Math.cos(r)); el.setAttribute('y1',150-tail*Math.sin(r));
+  el.setAttribute('x2',150+len*Math.cos(r));  el.setAttribute('y2',150+len*Math.sin(r));
+}
+function updateClock(){
+  const n=new Date(), ms=n.getMilliseconds();
+  const ss=n.getSeconds()+ms/1000, mm=n.getMinutes()+ss/60, hh=(n.getHours()%12)+mm/60;
+  setHand('hourHand',hh*30,72,12);
+  setHand('minHand', mm*6, 90,14);
+  setHand('secHand', ss*6, 92,16);
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+function fmt(ms){ const d=new Date(ms); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+
+// ── 24h ring ──────────────────────────────────────────────────────────────────
+// We store hit-test rects for tooltip
+let segHitAreas = []; // {startMs,endMs,x1,y1,x2,y2} — approximated as arc midpoint
+
+function drawRing(){
+  const canvas=document.getElementById('ringCanvas');
+  const ctx=canvas.getContext('2d');
+  const dpr=devicePixelRatio, W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const cx=W/2,cy=H/2;
+  const ro=W*0.49, ri=W*(0.77/2)+W*0.018;
+  const rMid=(ro+ri)/2, rW=ro-ri;
+
+  const now=new Date();
+  const day0=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+  const nowMs=now.getTime(), dayMs=86400000;
+  const t2a=ms=>((ms-day0)/dayMs)*2*Math.PI-Math.PI/2;
+
+  // BG
+  ctx.beginPath(); ctx.arc(cx,cy,rMid,-Math.PI/2,3*Math.PI/2);
+  ctx.strokeStyle='#1a1917'; ctx.lineWidth=rW; ctx.stroke();
+
+  // Elapsed
+  const eA=((nowMs-day0)/dayMs)*2*Math.PI;
+  if(eA>0){
+    ctx.beginPath(); ctx.arc(cx,cy,rMid,-Math.PI/2,-Math.PI/2+eA);
+    ctx.strokeStyle='#2e2c2a'; ctx.lineWidth=rW; ctx.stroke();
+  }
+
+  // Study segments
+  const segs=[...state.segments.filter(s=>s.study)];
+  // active session shown but NO tooltip (end unknown)
+  if(state.isStudying&&state.sessionStart) segs.push({startMs:state.sessionStart,endMs:nowMs,active:true});
+
+  segHitAreas=[];
+  for(const seg of segs){
+    const sA=t2a(Math.max(seg.startMs,day0));
+    const eA2=t2a(Math.min(seg.endMs,nowMs));
+    if(eA2<=sA) continue;
+    ctx.beginPath(); ctx.arc(cx,cy,rMid,sA,eA2);
+    ctx.strokeStyle='#6b7a61'; ctx.lineWidth=rW; ctx.stroke();
+    // store midpoint for hit test (only completed segments get tooltip)
+    if(!seg.active){
+      const midA=(sA+eA2)/2;
+      segHitAreas.push({
+        startMs:seg.startMs, endMs:seg.endMs,
+        mx:cx+rMid*Math.cos(midA), my:cy+rMid*Math.sin(midA),
+        sA,eA2,rMid,rW,cx,cy
+      });
+    }
+  }
+
+  // ① Hour labels (外側に0,3,6,...,21 を表示、6の倍数は大きく)
+  ctx.save();
+  const rOuter=ro+W*0.038; // 外周より少し外
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(let h=0;h<24;h++){
+    const a=(h/24)*2*Math.PI-Math.PI/2;
+    const isMain=h%6===0;
+    const isSub=h%3===0;
+    if(!isSub) continue; // 3時間ごとのみ
+    ctx.font=`${isMain?'600':'500'} ${Math.round(W*(isMain?0.038:0.028))}px "Cormorant Garamond",serif`;
+    ctx.fillStyle=isMain?'rgba(220,216,208,0.85)':'rgba(160,154,148,0.65)';
+    const lx=cx+rOuter*Math.cos(a), ly=cy+rOuter*Math.sin(a);
+    ctx.fillText(String(h),lx,ly);
+  }
+  ctx.restore();
+
+  // Ticks
+  ctx.save();
+  for(let h=0;h<24;h++){
+    const a=(h/24)*2*Math.PI-Math.PI/2;
+    const isQ=h%6===0;
+    const tLen=isQ?rW*0.6:(h%3===0?rW*0.4:rW*0.25);
+    const r1=ri+(rW-tLen)/2, r2=r1+tLen;
+    ctx.beginPath();
+    ctx.moveTo(cx+r1*Math.cos(a),cy+r1*Math.sin(a));
+    ctx.lineTo(cx+r2*Math.cos(a),cy+r2*Math.sin(a));
+    ctx.strokeStyle=isQ?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.08)';
+    ctx.lineWidth=isQ?1.8*dpr:0.9*dpr;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Now-dot
+  const nowA=((nowMs-day0)/dayMs)*2*Math.PI-Math.PI/2;
+  ctx.beginPath(); ctx.arc(cx+rMid*Math.cos(nowA),cy+rMid*Math.sin(nowA),rW*0.38,0,2*Math.PI);
+  ctx.fillStyle='#c8a96e'; ctx.fill();
+}
+
+// ② Tooltip hit test
+function ptInArc(px,py,hit){
+  const dx=px-hit.cx, dy=py-hit.cy;
+  const dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist<hit.rMid-hit.rW/2||dist>hit.rMid+hit.rW/2) return false;
+  let angle=Math.atan2(dy,dx);
+  // normalize to [sA, eA2] range
+  let sA=hit.sA, eA=hit.eA2;
+  // unwrap angle
+  while(angle<sA-0.01) angle+=2*Math.PI;
+  return angle>=sA&&angle<=eA;
+}
+
+document.getElementById('ringCanvas').addEventListener('mousemove',e=>{
+  const rect=e.currentTarget.getBoundingClientRect();
+  const dpr=devicePixelRatio;
+  const px=(e.clientX-rect.left)*dpr, py=(e.clientY-rect.top)*dpr;
+  let found=null;
+  for(const h of segHitAreas){ if(ptInArc(px,py,h)){found=h;break;} }
+  if(found){
+    tooltip.innerHTML=`<b>勉強開始</b>　${fmt(found.startMs)}<br><b>中断時刻</b>　${fmt(found.endMs)}`;
+    tooltip.style.left=(e.clientX+14)+'px';
+    tooltip.style.top =(e.clientY-10)+'px';
+    tooltip.classList.add('visible');
+  } else {
+    tooltip.classList.remove('visible');
+  }
+});
+document.getElementById('ringCanvas').addEventListener('mouseleave',()=>{
+  tooltip.classList.remove('visible');
+});
+
+// ── UI update ─────────────────────────────────────────────────────────────────
+const p2=n=>String(Math.floor(n)).padStart(2,'0');
+function liveTotal(){
+  return state.isStudying&&state.sessionStart
+    ? state.totalSeconds+Math.floor((Date.now()-state.sessionStart)/1000)
+    : state.totalSeconds;
+}
+function updateUI(){
+  const tot=liveTotal();
+  document.getElementById('studyTimeDisplay').textContent=`${p2(tot/3600)}:${p2((tot%3600)/60)}:${p2(tot%60)}`;
+  document.getElementById('studyTimeDisplay').classList.toggle('active',state.isStudying);
+  const nowSec=new Date().getHours()*3600+new Date().getMinutes()*60+new Date().getSeconds();
+  document.getElementById('percentDisplay').textContent=(nowSec>0?(tot/nowSec*100).toFixed(1):'0.0')+'%';
+  document.getElementById('indicator').classList.toggle('on',state.isStudying);
+  document.getElementById('statusLabel').textContent=state.isStudying?'勉強中':'待機中';
+  const btn=document.getElementById('mainBtn');
+  btn.textContent=state.isStudying?'一時停止':'勉強開始';
+  btn.classList.toggle('studying',state.isStudying);
+  const d=new Date();
+  document.getElementById('dateLabel').textContent=`${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+}
+
+// ── Firebase sync ─────────────────────────────────────────────────────────────
+function setSyncStatus(ok, label){
+  const dot=document.getElementById('syncDot'), lbl=document.getElementById('syncLabel');
+  dot.className='sync-dot'+(ok===true?' ok':ok===false?' err':'');
+  lbl.textContent=label;
+}
+
+function pushToFirebase(){
+  if(!dbRef) return;
+  ignoreRemote=true;
+  // Serialize state (sessionStart may be live)
+  const payload={
+    date:state.date,
+    totalSeconds:state.totalSeconds,
+    isStudying:state.isStudying,
+    sessionStart:state.sessionStart||null,
+    segments:state.segments,
+    updatedAt: Date.now()
+  };
+  set(dbRef, payload)
+    .then(()=>{ setSyncStatus(true,'同期済み'); setTimeout(()=>{ ignoreRemote=false; },500); })
+    .catch(()=>{ setSyncStatus(false,'同期エラー'); ignoreRemote=false; });
+}
+
+function attachListener(){
+  if(!dbRef) return;
+  onValue(dbRef, snap=>{
+    if(ignoreRemote) return;
+    const data=snap.val();
+    if(!data) return;
+    // If remote date differs from today, ignore old data
+    if(data.date!==todayStr()) return;
+    // Merge: take remote if its totalSeconds >= local (other device may have studied more)
+    state.date          = data.date;
+    state.totalSeconds  = data.totalSeconds||0;
+    state.isStudying    = data.isStudying||false;
+    state.sessionStart  = data.sessionStart||null;
+    state.segments      = data.segments||[];
+    setSyncStatus(true,'同期済み');
+    updateUI();
+  }, err=>{ setSyncStatus(false,'同期エラー: '+err.code); });
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+const provider=new GoogleAuthProvider();
+document.getElementById('loginBtn').addEventListener('click',()=>{
+  signInWithPopup(auth,provider).catch(e=>console.error(e));
+});
+document.getElementById('userBadge').addEventListener('click',()=>{
+  if(confirm('ログアウトしますか？')) signOut(auth);
+});
+
+onAuthStateChanged(auth, user=>{
+  if(user){
+    uid=user.uid;
+    document.getElementById('authOverlay').classList.add('hidden');
+    document.getElementById('userPhoto').src=user.photoURL||'';
+    document.getElementById('userName').textContent=user.displayName||user.email||'';
+    // DB ref: users/{uid}/{today}
+    dbRef=ref(db,`users/${uid}/${todayStr()}`);
+    setSyncStatus(null,'接続中…');
+    attachListener();
+  } else {
+    uid=null; dbRef=null;
+    document.getElementById('authOverlay').classList.remove('hidden');
+    setSyncStatus(null,'未接続');
+  }
+});
+
+// ── Buttons ───────────────────────────────────────────────────────────────────
+document.getElementById('mainBtn').addEventListener('click',()=>{
+  const now=Date.now();
+  if(!state.isStudying){
+    state.isStudying=true; state.sessionStart=now;
+  } else {
+    state.totalSeconds+=Math.floor((now-state.sessionStart)/1000);
+    state.segments.push({startMs:state.sessionStart,endMs:now,study:true});
+    state.isStudying=false; state.sessionStart=null;
+  }
+  pushToFirebase(); updateUI();
+});
+
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  if(!confirm('本日の記録をリセットしますか？')) return;
+  state=freshState();
+  pushToFirebase(); updateUI();
+});
+
+// ── Rollover check ────────────────────────────────────────────────────────────
+setInterval(()=>{
+  if(state.date!==todayStr()){
+    if(state.isStudying&&state.sessionStart){
+      const now=Date.now();
+      state.segments.push({startMs:state.sessionStart,endMs:now,study:true});
+      state.totalSeconds+=Math.floor((now-state.sessionStart)/1000);
+    }
+    state=freshState();
+    if(dbRef) dbRef=ref(db,`users/${uid}/${todayStr()}`);
+    pushToFirebase(); updateUI();
+  }
+},10000);
+
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden){updateUI();drawRing();} });
+
+// ── Main loop ─────────────────────────────────────────────────────────────────
+function tick(){ updateClock(); drawRing(); updateUI(); requestAnimationFrame(tick); }
+tick();
+</script>
+</body>
+</html>
